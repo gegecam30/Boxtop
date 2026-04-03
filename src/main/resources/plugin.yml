@@ -1,0 +1,17 @@
+name: BoxTop
+version: 2.6
+main: fun.gexel.boxtop.BoxTopPlugin
+api-version: 1.13
+authors: [_gengis]
+description: Thanks for download!
+
+commands:
+  boxtop:
+    description: main command
+    usage: /boxtop
+    aliases: [box, bt]
+
+permissions:
+  boxtop.admin:
+    description: Permite administrar los sacos de boxeo (crear, borrar, recargar).
+    default: op

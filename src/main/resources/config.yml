@@ -1,0 +1,140 @@
+# ----------------------------------------------------
+#   ____  _____  __  _________  ____  ____ 
+#  (  _ \(  _  )(  \/  )(_   _)(  _ \(  _ \
+#   ) _ < )(_)(  )    (   ) (   ) _ < ) __/
+#  (____/(_____)(_/\/\_) (___) (____/(__)  
+#
+#  BoxTop - The Ultimate Punching Bag Plugin
+#  Author: _gengis | Version: 2.5 (Legacy Support)
+# ----------------------------------------------------
+
+# --- HIT NOTIFICATION (Action Bar) ---
+# Message displayed above the inventory when hitting the bag.
+# [!] Replaced emoji with safe ASCII text
+hit-actionbar: "&c&l[!] HIT! &fYou dealt &e{damage} &fdamage"
+
+# --- PHYSICS SYSTEM ---
+physics:
+  enabled: true
+  # Knockback strength (0.1 to 1.0 recommended)
+  knockback-strength: 0.4
+  # Upward vertical thrust
+  vertical-strength: 0.1
+
+# --- VISUAL EFFECTS ---
+particles:
+  enabled: true
+  # Particle Types: 
+  # XSeries handles compatibility automatically. You can use modern names.
+  # Common examples: VILLAGER_HAPPY, FLAME, HEART, SOUL, CLOUD, SPELL_WITCH
+  type: "VILLAGER_HAPPY"
+  amount: 3
+  offset-y: 2.2
+  speed: 0.1
+  interval: 20
+
+# --- GLOWING EFFECT ---
+glow:
+  enabled: true
+  # Valid Colors (Bukkit standard):
+  # BLACK, DARK_BLUE, DARK_GREEN, DARK_AQUA, DARK_RED, DARK_PURPLE, GOLD, GRAY,
+  # DARK_GRAY, BLUE, GREEN, AQUA, RED, LIGHT_PURPLE, YELLOW, WHITE
+  color: "GOLD"
+
+# --- SOUND SYSTEM ---
+sounds:
+  enabled: true
+  # Sounds Reference (XSound): 
+  # Use Modern (1.13+) names. The plugin will auto-translate them for 1.12.
+  # LIST: https://github.com/CryptoMorin/XSeries/blob/master/src/main/java/com/cryptomorin/xseries/XSound.java
+  
+  # Sound on hit (Soft hit)
+  hit-sound: "ENTITY_PLAYER_ATTACK_WEAK"
+  # Sound on hit with muscle bonus (Heavy hit)
+  muscle-sound: "ENTITY_ZOMBIE_ATTACK_IRON_DOOR"
+  
+  volume: 1.0
+  pitch: 1.0
+
+# --- STAMINA SYSTEM (Fatigue) ---
+stamina:
+  enabled: false
+  max-hits: 20
+  # Seconds without hitting to reset the burst counter
+  reset-burst-time: 5
+  # Duration of the exhaustion cooldown in seconds
+  cooldown-duration: 60
+  # [!] Replaced emojis with (!)
+  message-tired: "&c(!) You are exhausted! Rest for ({time}s)."
+  message-recovered: "&a(!) You have caught your breath."
+
+# --- MUSCULATURE SYSTEM (RPG) ---
+musculature:
+  enabled: true
+  # Damage required to gain a bonus level
+  damage-threshold: 100
+  # Extra damage per level
+  bonus-damage: 0.5
+  # Maximum extra damage allowed
+  max-bonus: 20.0
+  # Level up sound
+  level-up-sound: "ENTITY_PLAYER_LEVELUP"
+
+# --- REWARDS ---
+rewards:
+  enabled: true
+  # Damage interval to give rewards (every 1000 damage)
+  interval: 1000.0
+  commands:
+    - "eco give %player% 50"
+    # Using plain text for 1.12 compatibility
+    - "tellraw %player% {\"text\":\"[BoxTop] Reward received!\",\"color\":\"green\"}"
+
+# --- DUEL SYSTEM (1vs1) ---
+duels:
+  enabled: true
+  duration: 30
+  search-radius: 15
+  
+  # Format of the invitation lines
+  invite-format:
+    - "&8&m---------------------------------"
+    - "&e{player} &7has challenged you to a BoxTop Duel!"
+    - "&6[CLICK HERE TO ACCEPT]"
+    - "&8&m---------------------------------"
+  
+  messages:
+    # [!] Replaced emoji with >>
+    menu-title: "&8>> Select Opponent"
+    click-to-challenge: "&7Click to challenge &e{player}"
+    bag-busy: "&cThis bag is currently busy!"
+    no-players-nearby: "&cNo players found nearby."
+    duel-started: "&aDUEL STARTED! &eFight!"
+    duel-ended-winner: "&6WINNER! &e{winner} &7won with &c{damage} &7damage!"
+    duel-ended-tie: "&eIt's a tie! Both dealt &c{damage} &7damage."
+    invite-hint: "&7(Type &e/boxtop accept {player} &7to accept)"
+    # BossBar
+    bossbar-format: "&c{p1} &7(&c{d1}&7) &8vs &b{p2} &7(&b{d2}&7) &f- &e{time}s"
+
+# --- GENERAL MESSAGES ---
+messages:
+  prefix: "&8[&6BoxTop&8] "
+  no-permission: "&cYou do not have permission."
+  only-players: "&cOnly players can execute this command."
+  reload: "&aConfiguration reloaded."
+  usage-set: "&cUsage: /boxtop setentity <name>"
+  usage-unset: "&cUsage: /boxtop unsetentity <name>"
+  entity-set: "&aBag '&e{name}&a' successfully set!"
+  entity-unset: "&eBag '&6{name}&e' removed."
+  entity-not-found: "&cBag not found."
+  no-entity-nearby: "&cNo valid entities nearby."
+  
+  # STATS & LIST
+  stats-header: "&8&m--------&r &6Statistics &8&m--------"
+  stats-format: "&eTotal Damage: &f{damage}"
+  stats-no-data: "&cYou haven't hit anything yet."
+  
+  list-header: "&8&m--------&r &6Active Arenas &8&m--------"
+  # [!] Replaced emoji with *
+  list-format: "&e* &f{name} &7(Active)"
+  list-empty: "&cNo bags configured."
