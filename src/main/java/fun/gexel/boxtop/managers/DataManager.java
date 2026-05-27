@@ -1,6 +1,7 @@
 package fun.gexel.boxtop.managers;
 
 import fun.gexel.boxtop.BoxTopPlugin;
+import fun.gexel.boxtop.objects.BagData;
 import fun.gexel.boxtop.objects.PlayerStat;
 import org.bukkit.ChatColor;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -10,38 +11,50 @@ import java.io.File;
 import java.io.IOException;
 import java.util.*;
 
+/**
+ * DataManager refactorizado.
+ *
+ * RESPONSABILIDADES:
+ *  - Gestión de BagData (configuración por saco) → data.yml
+ *  - Mensajes y acceso al config.yml
+ *  - Delegación de estadísticas de jugadores → DatabaseManager
+ *
+ * MIGRACIÓN TRANSPARENTE:
+ *  Compatible con el formato antiguo de data.yml (uuid como string simple).
+ *  Al guardar por primera vez, se escribe el nuevo formato con todos los campos.
+ */
 public class DataManager {
 
     private final BoxTopPlugin plugin;
-    private final Map<UUID, PlayerStat> stats = new HashMap<>();
-    private final Map<String, UUID> boxingBags = new HashMap<>();
 
+    // --- ALMACENAMIENTO DE SACOS (YAML) ---
+    private final Map<String, BagData> boxingBags = new LinkedHashMap<>(); // LinkedHashMap preserva orden de inserción
     private File dataFile;
     private FileConfiguration dataConfig;
 
+    // --- ESTADÍSTICAS DE JUGADORES (SQLite) ---
+    private final DatabaseManager databaseManager;
+
+    // -------------------------------------------------------
+    // CONSTRUCTOR
+    // -------------------------------------------------------
+
     public DataManager(BoxTopPlugin plugin) {
         this.plugin = plugin;
+        this.databaseManager = new DatabaseManager(plugin);
         createDataFile();
-        loadSystemConfig();
-        loadStats();
+        loadBags();
     }
 
-    public void reloadConfig() {
-        plugin.reloadConfig();
-        createDataFile();
-        loadSystemConfig();
-    }
+    // -------------------------------------------------------
+    // GESTIÓN DEL data.yml
+    // -------------------------------------------------------
 
-    // --- GESTIÓN DE DATA.YML ---
     private void createDataFile() {
         dataFile = new File(plugin.getDataFolder(), "data.yml");
         if (!dataFile.exists()) {
             dataFile.getParentFile().mkdirs();
-            try {
-                dataFile.createNewFile();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+            try { dataFile.createNewFile(); } catch (IOException e) { e.printStackTrace(); }
         }
         dataConfig = YamlConfiguration.loadConfiguration(dataFile);
     }
@@ -54,135 +67,191 @@ public class DataManager {
         }
     }
 
-    // --- CARGA DE DATOS ---
-    private void loadSystemConfig() {
+    // -------------------------------------------------------
+    // CARGA DE SACOS (con migración transparente)
+    // -------------------------------------------------------
+
+    /**
+     * Carga todos los sacos desde data.yml.
+     * Soporta el formato antiguo (uuid como string directo) y el nuevo (objeto completo).
+     */
+    private void loadBags() {
         boxingBags.clear();
-        if (dataConfig.contains("boxing-bags")) {
-            for (String key : dataConfig.getConfigurationSection("boxing-bags").getKeys(false)) {
-                try {
-                    UUID uuid = UUID.fromString(dataConfig.getString("boxing-bags." + key));
-                    boxingBags.put(key, uuid);
-                } catch (IllegalArgumentException e) {
-                    plugin.getLogger().warning("UUID invalido para saco: " + key);
-                }
+        if (!dataConfig.contains("boxing-bags")) return;
+
+        for (String bagName : dataConfig.getConfigurationSection("boxing-bags").getKeys(false)) {
+            try {
+                BagData bag = BagData.deserialize(bagName, dataConfig);
+                boxingBags.put(bagName, bag);
+            } catch (Exception e) {
+                plugin.getLogger().warning("[BoxTop] Error loading bag '" + bagName + "': " + e.getMessage());
             }
         }
+
+        plugin.getLogger().info("[BoxTop] Loaded " + boxingBags.size() + " boxing bag(s).");
     }
 
-    private void loadStats() {
-        stats.clear();
-        if (dataConfig.contains("stats")) {
-            for (String uuidStr : dataConfig.getConfigurationSection("stats").getKeys(false)) {
-                try {
-                    UUID uuid = UUID.fromString(uuidStr);
-                    String name = dataConfig.getString("stats." + uuidStr + ".name");
-                    double damage = dataConfig.getDouble("stats." + uuidStr + ".damage");
-                    stats.put(uuid, new PlayerStat(name, uuid, damage));
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
-        }
+    // -------------------------------------------------------
+    // RECARGA
+    // -------------------------------------------------------
+
+    public void reloadConfig() {
+        plugin.reloadConfig();
+        createDataFile();
+        loadBags();
     }
 
-    // --- MÉTODOS PÚBLICOS (API) ---
+    // -------------------------------------------------------
+    // API DE SACOS — CRUD
+    // -------------------------------------------------------
 
-    public void addBoxingBag(String name, UUID uuid) {
-        boxingBags.put(name.toLowerCase(), uuid);
-        saveBagsToConfig();
+    /**
+     * Añade un nuevo saco con configuración por defecto (heredada del config.yml global).
+     * Los valores globales del config.yml se usan como punto de partida.
+     */
+    public BagData addBoxingBag(String name, java.util.UUID uuid) {
+        BagData bag = new BagData(name, uuid);
+
+        // Heredar valores globales del config.yml como defaults iniciales
+        bag.setGlowEnabled(plugin.getConfig().getBoolean("glow.enabled", true));
+        bag.setGlowColor(parseColor(plugin.getConfig().getString("glow.color", "GOLD")));
+        bag.setParticlesEnabled(plugin.getConfig().getBoolean("particles.enabled", true));
+        bag.setParticleType(plugin.getConfig().getString("particles.type", "VILLAGER_HAPPY"));
+        bag.setPhysicsEnabled(plugin.getConfig().getBoolean("physics.enabled", true));
+        bag.setKnockbackStrength(plugin.getConfig().getDouble("physics.knockback-strength", 0.4));
+        bag.setVerticalStrength(plugin.getConfig().getDouble("physics.vertical-strength", 0.1));
+
+        boxingBags.put(name.toLowerCase(), bag);
+        saveBag(bag);
+        return bag;
     }
 
+    /**
+     * Elimina un saco por nombre.
+     * @return true si existía y fue eliminado, false si no se encontró.
+     */
     public boolean removeBoxingBag(String name) {
-        if (boxingBags.containsKey(name.toLowerCase())) {
-            boxingBags.remove(name.toLowerCase());
-            dataConfig.set("boxing-bags." + name.toLowerCase(), null); 
-            saveDataFile();
-            return true;
+        String key = name.toLowerCase();
+        if (!boxingBags.containsKey(key)) return false;
+
+        boxingBags.remove(key);
+        dataConfig.set("boxing-bags." + key, null);
+        saveDataFile();
+        return true;
+    }
+
+    /**
+     * Persiste un BagData específico en el YAML.
+     * Solo reescribe ese saco, no todo el archivo.
+     */
+    public void saveBag(BagData bag) {
+        bag.serialize(dataConfig);
+        saveDataFile();
+    }
+
+    // -------------------------------------------------------
+    // API DE SACOS — CONSULTAS
+    // -------------------------------------------------------
+
+    public BagData getBag(String name) {
+        return boxingBags.get(name.toLowerCase());
+    }
+
+    public BagData getBagByUUID(java.util.UUID uuid) {
+        for (BagData bag : boxingBags.values()) {
+            if (bag.getUuid().equals(uuid)) return bag;
+        }
+        return null;
+    }
+
+    public java.util.UUID getBagUUID(String name) {
+        BagData bag = boxingBags.get(name.toLowerCase());
+        return bag != null ? bag.getUuid() : null;
+    }
+
+    public boolean isBoxingBag(java.util.UUID uuid) {
+        for (BagData bag : boxingBags.values()) {
+            if (bag.getUuid().equals(uuid)) return true;
         }
         return false;
     }
 
-    public UUID getBagUUID(String name) {
-        return boxingBags.get(name.toLowerCase());
-    }
-
-    public Collection<UUID> getAllBagUUIDs() {
-        return boxingBags.values();
-    }
-
-    // [FIX 1] Agregado: Requerido por HitListener y DuelListener
-    public boolean isBoxingBag(UUID uuid) {
-        return boxingBags.containsValue(uuid);
-    }
-
-    // [FIX 2] Agregado: Requerido por BoxTopCommand (para listar sacos)
     public Set<String> getBagNames() {
         return boxingBags.keySet();
     }
 
-    private void saveBagsToConfig() {
-        for (Map.Entry<String, UUID> entry : boxingBags.entrySet()) {
-            dataConfig.set("boxing-bags." + entry.getKey(), entry.getValue().toString());
-        }
-        saveDataFile();
+    public Collection<BagData> getAllBags() {
+        return boxingBags.values();
     }
 
-    // Stats
-    public void addDamage(UUID uuid, String playerName, double damage) {
-        PlayerStat stat = stats.get(uuid);
-        if (stat == null) {
-            stat = new PlayerStat(playerName, uuid, damage);
-            stats.put(uuid, stat);
-        } else {
-            stat.addDamage(damage);
+    /**
+     * Shortcut: retorna solo los UUIDs (para compatibilidad con GlowManager y ParticleTask).
+     */
+    public Collection<java.util.UUID> getAllBagUUIDs() {
+        List<java.util.UUID> uuids = new ArrayList<>();
+        for (BagData bag : boxingBags.values()) {
+            uuids.add(bag.getUuid());
         }
-        saveData(); 
+        return uuids;
     }
 
-    // [FIX 3] Agregado: Requerido por HitListener y BoxTopCommand
-    public PlayerStat getPlayerStat(UUID uuid) {
-        // Devuelve el stat existente o uno vacío temporal (evita NullPointerException)
-        return stats.getOrDefault(uuid, new PlayerStat("Unknown", uuid, 0));
+    // -------------------------------------------------------
+    // DELEGACIÓN A DatabaseManager (estadísticas de jugadores)
+    // -------------------------------------------------------
+
+    public void addDamage(java.util.UUID uuid, String playerName, double damage) {
+        databaseManager.addDamage(uuid, playerName, damage);
+    }
+
+    public PlayerStat getPlayerStat(java.util.UUID uuid) {
+        return databaseManager.getPlayerStat(uuid);
     }
 
     public List<PlayerStat> getTop(int limit) {
-        List<PlayerStat> sorted = new ArrayList<>(stats.values());
-        Collections.sort(sorted);
-        if (sorted.size() > limit) {
-            return sorted.subList(0, limit);
-        }
-        return sorted;
+        return databaseManager.getTop(limit);
     }
 
-    public void saveData() {
-        dataConfig.set("stats", null);
-        for (PlayerStat stat : stats.values()) {
-            String path = "stats." + stat.getUuid().toString();
-            dataConfig.set(path + ".name", stat.getPlayerName());
-            dataConfig.set(path + ".damage", stat.getDamage());
-        }
-        saveBagsToConfig(); 
+    /**
+     * Debe llamarse desde onDisable() para cerrar la conexión SQLite limpiamente.
+     */
+    public void shutdown() {
+        databaseManager.close();
     }
 
-    // --- MENSAJES ---
+    // -------------------------------------------------------
+    // MENSAJES (sin cambios respecto al original)
+    // -------------------------------------------------------
+
     public String getMessage(String path) {
         String msg = plugin.getConfig().getString(path);
         if (msg == null) msg = plugin.getConfig().getString("messages." + path);
         if (msg == null) return "Msg error: " + path;
-        return ChatColor.translateAlternateColorCodes('&', plugin.getConfig().getString("messages.prefix") + msg);
+        String prefix = plugin.getConfig().getString("messages.prefix", "");
+        return ChatColor.translateAlternateColorCodes('&', prefix + msg);
     }
-    
+
     public String getRawMessage(String path) {
         String msg = plugin.getConfig().getString(path);
         if (msg == null) return path;
         return ChatColor.translateAlternateColorCodes('&', msg);
     }
 
-    // [FIX 4] Mantenido: Requerido por DuelManager
     public List<String> getStringList(String path) {
         if (plugin.getConfig().contains(path)) {
             return plugin.getConfig().getStringList(path);
         }
         return new ArrayList<>();
+    }
+
+    // -------------------------------------------------------
+    // HELPERS PRIVADOS
+    // -------------------------------------------------------
+
+    private ChatColor parseColor(String s) {
+        try {
+            return ChatColor.valueOf(s.toUpperCase());
+        } catch (Exception e) {
+            return ChatColor.GOLD;
+        }
     }
 }
