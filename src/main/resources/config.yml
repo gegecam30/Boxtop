@@ -138,3 +138,25 @@ messages:
   # [!] Replaced emoji with *
   list-format: "&e* &f{name} &7(Active)"
   list-empty: "&cNo bags configured."
+
+
+  # --- SPAWNED BAG (ArmorStand) ---
+# Configuración para sacos creados con /boxtop spawn
+# Estos sacos son ArmorStands invisibles gestionados por el plugin.
+spawned-bag:
+  # CustomModelData para el resource pack.
+  # 0 = sin modelo custom (muestra LEATHER_CHESTPLATE normal)
+  # >0 = activa el modelo 3D del resource pack para ese ID
+  # Ejemplo: si tu resource pack define el modelo de saco con CMD 1001, pon 1001 aquí.
+  custom-model-data: 1001
+
+  # Instrucciones para el resource pack:
+  # 1. Crea la carpeta: assets/minecraft/models/item/
+  # 2. Edita leather_chestplate.json y agrega un override:
+  #    {
+  #      "predicate": {"custom_model_data": 1001},
+  #      "model": "item/boxing_bag"
+  #    }
+  # 3. Crea assets/minecraft/models/item/boxing_bag.json con tu modelo 3D
+  # 4. Pon las texturas en assets/minecraft/textures/item/
+  # 5. Sube el pack al servidor o distribúyelo manualmente

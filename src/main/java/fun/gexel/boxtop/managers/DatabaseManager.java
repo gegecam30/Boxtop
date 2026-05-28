@@ -9,26 +9,22 @@ import java.util.*;
 import java.util.logging.Level;
 
 /**
- * Gestiona todas las operaciones de base de datos SQLite
- * para las estadísticas de jugadores.
+ * Gestiona estadísticas de jugadores usando H2 en modo embedded.
  *
- * DISEÑO:
- * - Un único archivo boxtop_stats.db en la carpeta del plugin.
- * - Tabla "player_stats": uuid (PK), name, damage.
- * - Todas las escrituras son async para no bloquear el hilo principal.
- * - Las lecturas del top se hacen en memoria (cache) para las queries frecuentes.
+ * Por qué H2 y no SQLite:
+ *   SQLite-JDBC incluye código nativo (.dll/.so) que el maven-shade-plugin
+ *   rompe al relocar los paquetes → UnsatisfiedLinkError en arranque.
+ *   H2 es 100% Java puro, se reloca sin problemas y genera un único archivo .mv.db.
+ *
+ * Archivo generado: plugins/BoxTop/boxtop_stats.mv.db
  */
 public class DatabaseManager {
 
     private final BoxTopPlugin plugin;
     private Connection connection;
 
-    // Cache en memoria — se sincroniza con la DB al inicio y en cada write
+    // Cache en memoria — O(1) para lecturas frecuentes del top y stats personales
     private final Map<UUID, PlayerStat> cache = new HashMap<>();
-
-    // -------------------------------------------------------
-    // INICIALIZACIÓN
-    // -------------------------------------------------------
 
     public DatabaseManager(BoxTopPlugin plugin) {
         this.plugin = plugin;
@@ -37,32 +33,35 @@ public class DatabaseManager {
         loadAllIntoCache();
     }
 
+    // -------------------------------------------------------
+    // CONEXIÓN
+    // -------------------------------------------------------
+
     private void connect() {
         try {
-            // Cargamos el driver de SQLite que viene incluido en el JDK desde Java 8
-            Class.forName("org.sqlite.JDBC");
-            File dbFile = new File(plugin.getDataFolder(), "boxtop_stats.db");
-            connection = DriverManager.getConnection("jdbc:sqlite:" + dbFile.getAbsolutePath());
+            // H2 relocado por shade — usamos el nombre relocado del driver
+            Class.forName("fun.gexel.boxtop.utils.h2.Driver");
 
-            // Optimizaciones de rendimiento para SQLite
-            try (Statement st = connection.createStatement()) {
-                st.execute("PRAGMA journal_mode=WAL");   // Write-Ahead Logging: más rápido en writes
-                st.execute("PRAGMA synchronous=NORMAL"); // Balance entre seguridad y velocidad
-            }
+            File dbFile = new File(plugin.getDataFolder(), "boxtop_stats");
+            // MODE=MySQL para sintaxis compatible; DB_CLOSE_ON_EXIT=FALSE evita cierre prematuro
+            String url = "jdbc:h2:file:" + dbFile.getAbsolutePath()
+                       + ";MODE=MySQL;DB_CLOSE_ON_EXIT=FALSE;AUTO_RECONNECT=TRUE";
 
-            plugin.getLogger().info("[BoxTop] SQLite database connected successfully.");
+            connection = DriverManager.getConnection(url, "sa", "");
+            plugin.getLogger().info("[BoxTop] H2 database connected. File: boxtop_stats.mv.db");
+
         } catch (Exception e) {
-            plugin.getLogger().log(Level.SEVERE, "[BoxTop] Failed to connect to SQLite database!", e);
+            plugin.getLogger().log(Level.SEVERE, "[BoxTop] Failed to connect to H2 database!", e);
         }
     }
 
     private void createTable() {
         if (connection == null) return;
-        String sql = "CREATE TABLE IF NOT EXISTS player_stats (" +
-                     "  uuid   TEXT PRIMARY KEY NOT NULL," +
-                     "  name   TEXT NOT NULL," +
-                     "  damage REAL NOT NULL DEFAULT 0" +
-                     ");";
+        String sql = "CREATE TABLE IF NOT EXISTS player_stats ("
+                   + "  uuid   VARCHAR(36) PRIMARY KEY NOT NULL,"
+                   + "  name   VARCHAR(64) NOT NULL,"
+                   + "  damage DOUBLE      NOT NULL DEFAULT 0"
+                   + ")";
         try (Statement st = connection.createStatement()) {
             st.execute(sql);
         } catch (SQLException e) {
@@ -70,25 +69,20 @@ public class DatabaseManager {
         }
     }
 
-    /**
-     * Carga todos los registros de la DB al cache en memoria al iniciar.
-     * Esto permite que getTop() y getPlayerStat() sean O(1) sin hits a disco.
-     */
     private void loadAllIntoCache() {
         if (connection == null) return;
         cache.clear();
-        String sql = "SELECT uuid, name, damage FROM player_stats";
         try (Statement st = connection.createStatement();
-             ResultSet rs = st.executeQuery(sql)) {
+             ResultSet rs = st.executeQuery("SELECT uuid, name, damage FROM player_stats")) {
             while (rs.next()) {
                 UUID uuid   = UUID.fromString(rs.getString("uuid"));
                 String name = rs.getString("name");
                 double dmg  = rs.getDouble("damage");
                 cache.put(uuid, new PlayerStat(name, uuid, dmg));
             }
-            plugin.getLogger().info("[BoxTop] Loaded " + cache.size() + " player records into cache.");
+            plugin.getLogger().info("[BoxTop] Loaded " + cache.size() + " player record(s) into cache.");
         } catch (SQLException e) {
-            plugin.getLogger().log(Level.SEVERE, "[BoxTop] Failed to load player stats from DB!", e);
+            plugin.getLogger().log(Level.SEVERE, "[BoxTop] Failed to load player stats!", e);
         }
     }
 
@@ -97,11 +91,9 @@ public class DatabaseManager {
     // -------------------------------------------------------
 
     /**
-     * Añade daño al jugador. Actualiza el cache inmediatamente (sync)
-     * y persiste en la DB de forma asíncrona para no bloquear el tick.
+     * Actualiza el cache inmediatamente (hilo principal) y persiste async.
      */
     public void addDamage(UUID uuid, String playerName, double damage) {
-        // 1. Actualizar cache (inmediato, en el hilo principal)
         PlayerStat stat = cache.get(uuid);
         if (stat == null) {
             stat = new PlayerStat(playerName, uuid, damage);
@@ -110,66 +102,57 @@ public class DatabaseManager {
             stat.addDamage(damage);
         }
 
-        // Capturamos el valor final para el lambda
-        final double finalDamage = stat.getDamage();
-        final String finalName   = playerName;
+        final double totalDamage = stat.getDamage();
+        final String name = playerName;
 
-        // 2. Persistir en DB (asíncrono — no bloquea el servidor)
-        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
-            upsertPlayer(uuid, finalName, finalDamage);
-        });
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () ->
+            upsertPlayer(uuid, name, totalDamage)
+        );
     }
 
-    /**
-     * Devuelve el stat de un jugador desde el cache.
-     * Nunca devuelve null — retorna un PlayerStat vacío si no existe.
-     */
+    /** Nunca devuelve null. */
     public PlayerStat getPlayerStat(UUID uuid) {
         return cache.getOrDefault(uuid, new PlayerStat("Unknown", uuid, 0));
     }
 
-    /**
-     * Devuelve el top N de jugadores, ordenado por daño descendente.
-     * Opera enteramente en memoria (O(n log n) sobre el cache).
-     */
+    /** Top N ordenado por daño descendente, operado en memoria. */
     public List<PlayerStat> getTop(int limit) {
         List<PlayerStat> sorted = new ArrayList<>(cache.values());
         Collections.sort(sorted);
         return sorted.size() > limit ? sorted.subList(0, limit) : sorted;
     }
 
-    /**
-     * Cierra la conexión limpiamente al apagar el plugin.
-     */
+    /** Llamar desde onDisable() para flush y cierre limpio. */
     public void close() {
         if (connection != null) {
             try {
+                // H2 necesita SHUTDOWN explícito en modo FILE para flush final
+                try (Statement st = connection.createStatement()) {
+                    st.execute("SHUTDOWN");
+                } catch (Exception ignored) {}
                 connection.close();
-                plugin.getLogger().info("[BoxTop] Database connection closed.");
+                plugin.getLogger().info("[BoxTop] Database closed cleanly.");
             } catch (SQLException e) {
-                plugin.getLogger().log(Level.WARNING, "[BoxTop] Error closing database connection.", e);
+                plugin.getLogger().log(Level.WARNING, "[BoxTop] Error closing database.", e);
             }
         }
     }
 
     // -------------------------------------------------------
-    // OPERACIONES INTERNAS (privadas)
+    // INTERNAL
     // -------------------------------------------------------
 
-    /**
-     * INSERT OR REPLACE — inserta si no existe, actualiza si ya existe.
-     * Llamado siempre desde un hilo asíncrono.
-     */
     private void upsertPlayer(UUID uuid, String name, double damage) {
         if (connection == null) return;
-        String sql = "INSERT OR REPLACE INTO player_stats (uuid, name, damage) VALUES (?, ?, ?)";
+        // MERGE INTO es el equivalente H2 de INSERT OR REPLACE
+        String sql = "MERGE INTO player_stats (uuid, name, damage) KEY(uuid) VALUES (?, ?, ?)";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setString(1, uuid.toString());
             ps.setString(2, name);
             ps.setDouble(3, damage);
             ps.executeUpdate();
         } catch (SQLException e) {
-            plugin.getLogger().log(Level.WARNING, "[BoxTop] Failed to upsert player " + name, e);
+            plugin.getLogger().log(Level.WARNING, "[BoxTop] Failed to upsert player: " + name, e);
         }
     }
 }
