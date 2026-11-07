@@ -2,6 +2,7 @@ package fun.gexel.boxtop.commands;
 
 import fun.gexel.boxtop.gui.BagConfigGUI;
 import fun.gexel.boxtop.managers.BagSpawnManager;
+import fun.gexel.boxtop.managers.BanManager;
 import fun.gexel.boxtop.managers.DataManager;
 import fun.gexel.boxtop.managers.DuelManager;
 import fun.gexel.boxtop.managers.GlowManager;
@@ -14,6 +15,7 @@ import net.md_5.bungee.api.chat.HoverEvent;
 import net.md_5.bungee.api.chat.TextComponent;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -33,16 +35,19 @@ public class BoxTopCommand implements CommandExecutor {
     private final ParticleTask particleTask;
     private final BagConfigGUI configGUI;
     private final BagSpawnManager spawnManager;
+    private final BanManager banManager;
 
     public BoxTopCommand(DataManager dataManager, GlowManager glowManager,
                          DuelManager duelManager, ParticleTask particleTask,
-                         BagConfigGUI configGUI, BagSpawnManager spawnManager) {
+                         BagConfigGUI configGUI, BagSpawnManager spawnManager,
+                         BanManager banManager) {
         this.dataManager  = dataManager;
         this.glowManager  = glowManager;
         this.duelManager  = duelManager;
         this.particleTask = particleTask;
         this.configGUI    = configGUI;
         this.spawnManager = spawnManager;
+        this.banManager   = banManager;
     }
 
     @Override
@@ -50,20 +55,23 @@ public class BoxTopCommand implements CommandExecutor {
 
         // --- HELP ---
         if (args.length == 0) {
-            sender.sendMessage(ChatColor.GOLD + "BoxTop " + ChatColor.GRAY + "(v2.8)");
+            sender.sendMessage(ChatColor.GOLD + "BoxTop " + ChatColor.GRAY + "(v3.4)");
             sender.sendMessage(ChatColor.YELLOW + "/boxtop stats "          + ChatColor.GRAY + "- Your statistics");
             sender.sendMessage(ChatColor.YELLOW + "/boxtop accept <player> "+ ChatColor.GRAY + "- Accept duel invite");
             if (sender.hasPermission("boxtop.admin")) {
-                sender.sendMessage(ChatColor.RED + "/boxtop spawn <name> "     + ChatColor.GRAY + "- Spawn a bag ArmorStand here");
-                sender.sendMessage(ChatColor.RED + "/boxtop setentity <name> " + ChatColor.GRAY + "- Link bag to existing mob");
-                sender.sendMessage(ChatColor.RED + "/boxtop unsetentity <name>"+ ChatColor.GRAY + "- Remove bag");
-                sender.sendMessage(ChatColor.RED + "/boxtop edit <name> "      + ChatColor.GRAY + "- Open bag config GUI");
-                sender.sendMessage(ChatColor.RED + "/boxtop list "             + ChatColor.GRAY + "- Interactive list");
-                sender.sendMessage(ChatColor.RED + "/boxtop tp <name> "        + ChatColor.GRAY + "- Teleport to bag");
-                sender.sendMessage(ChatColor.RED + "/boxtop reload "           + ChatColor.GRAY + "- Reload config");
+                sender.sendMessage(ChatColor.RED + "/boxtop spawn <name> "      + ChatColor.GRAY + "- Spawn a bag ArmorStand here");
+                sender.sendMessage(ChatColor.RED + "/boxtop setentity <name> "  + ChatColor.GRAY + "- Link bag to existing mob");
+                sender.sendMessage(ChatColor.RED + "/boxtop unsetentity <name>" + ChatColor.GRAY + "- Remove bag");
+                sender.sendMessage(ChatColor.RED + "/boxtop edit <name> "       + ChatColor.GRAY + "- Open bag config GUI");
+                sender.sendMessage(ChatColor.RED + "/boxtop list "              + ChatColor.GRAY + "- Interactive list");
+                sender.sendMessage(ChatColor.RED + "/boxtop tp <name> "         + ChatColor.GRAY + "- Teleport to bag");
+                sender.sendMessage(ChatColor.RED + "/boxtop resetranking <name> "+ ChatColor.GRAY + "- Reset per-bag ranking");
+                sender.sendMessage(ChatColor.RED + "/boxtop reload "            + ChatColor.GRAY + "- Reload config");
+                sender.sendMessage(ChatColor.RED + "/boxtop admin "             + ChatColor.GRAY + "- Advanced Ban management submenu");
             }
             return true;
         }
+
 
         // --- STATS ---
         if (args[0].equalsIgnoreCase("stats")) {
@@ -237,8 +245,159 @@ public class BoxTopCommand implements CommandExecutor {
             return true;
         }
 
+        // --- RESET RANKING ---
+        if (args[0].equalsIgnoreCase("resetranking")) {
+            if (!sender.hasPermission("boxtop.admin")) { sender.sendMessage(dataManager.getMessage("no-permission")); return true; }
+            if (args.length < 2) { sender.sendMessage(ChatColor.RED + "Usage: /boxtop resetranking <bag-name>"); return true; }
+            String bagName = args[1].toLowerCase();
+            if (dataManager.getBag(bagName) == null) {
+                sender.sendMessage(dataManager.getMessage("entity-not-found").replace("{name}", bagName));
+                return true;
+            }
+            dataManager.clearBagStats(bagName);
+            sender.sendMessage(ChatColor.GREEN + "[BoxTop] Ranking for bag '"
+                + ChatColor.YELLOW + bagName
+                + ChatColor.GREEN + "' has been reset.");
+            return true;
+        }
+
+        // --- ADMIN ENCAPSULATED COMMANDS ---
+        if (args[0].equalsIgnoreCase("admin")) {
+            if (!sender.hasPermission("boxtop.admin")) { sender.sendMessage(dataManager.getMessage("no-permission")); return true; }
+            if (args.length < 2) {
+                sender.sendMessage(ChatColor.GOLD + "✦ BoxTop Admin Commands ✦");
+                sender.sendMessage(ChatColor.YELLOW + "/boxtop admin wand " + ChatColor.GRAY + "- Get selection wand");
+                sender.sendMessage(ChatColor.YELLOW + "/boxtop admin generate [spacing] " + ChatColor.GRAY + "- Auto-build 3x3 posts");
+                sender.sendMessage(ChatColor.YELLOW + "/boxtop admin addpost " + ChatColor.GRAY + "- Add post looking at fence");
+                sender.sendMessage(ChatColor.YELLOW + "/boxtop admin clearposts " + ChatColor.GRAY + "- Clear all posts");
+                sender.sendMessage(ChatColor.YELLOW + "/boxtop admin ban <player> [time] [reason] " + ChatColor.GRAY + "- Ban player");
+                sender.sendMessage(ChatColor.YELLOW + "/boxtop admin unban <player> " + ChatColor.GRAY + "- Unban player");
+                sender.sendMessage(ChatColor.YELLOW + "/boxtop admin setlegacy " + ChatColor.GRAY + "- Set old single ban location");
+                return true;
+            }
+
+            String subCmd = args[1].toLowerCase();
+
+            if (subCmd.equals("wand")) {
+                if (!(sender instanceof Player)) { sender.sendMessage(ChatColor.RED + "Only players."); return true; }
+                Player player = (Player) sender;
+                org.bukkit.Material axeMat = org.bukkit.Material.getMaterial("GOLDEN_AXE");
+                if (axeMat == null) axeMat = org.bukkit.Material.getMaterial("GOLD_AXE");
+                org.bukkit.inventory.ItemStack wand = new org.bukkit.inventory.ItemStack(axeMat != null ? axeMat : org.bukkit.Material.STONE);
+                org.bukkit.inventory.meta.ItemMeta meta = wand.getItemMeta();
+                meta.setDisplayName(ChatColor.GOLD + "✦ BoxTop Ban Zone Wand"); // Matches contains("BoxTop Ban Zone Wand")
+                meta.setLore(java.util.Arrays.asList(ChatColor.GRAY + "Left-Click: Pos 1", ChatColor.GRAY + "Right-Click: Pos 2"));
+                wand.setItemMeta(meta);
+                player.getInventory().addItem(wand);
+                player.sendMessage(ChatColor.GREEN + "Wand received!");
+                return true;
+            }
+
+            if (subCmd.equals("generate")) {
+                if (!(sender instanceof Player)) { sender.sendMessage(ChatColor.RED + "Only players."); return true; }
+                Player player = (Player) sender;
+                int spacing = args.length > 2 ? Integer.parseInt(args[2]) : 2;
+                int count = banManager.generatePosts(player, spacing);
+                if (count < 0) sender.sendMessage(ChatColor.RED + "You must select 2 corners first with the wand!");
+                else sender.sendMessage(ChatColor.GREEN + "Generated " + count + " BoxTop posts in the selected perimeter!");
+                return true;
+            }
+
+            if (subCmd.equals("addpost")) {
+                if (!(sender instanceof Player)) { sender.sendMessage(ChatColor.RED + "Only players."); return true; }
+                Player player = (Player) sender;
+                org.bukkit.block.Block targetBlock = player.getTargetBlock((java.util.Set<org.bukkit.Material>) null, 5);
+                if (banManager.addPost(player, targetBlock)) sender.sendMessage(ChatColor.GREEN + "Post slot manually added!");
+                else sender.sendMessage(ChatColor.RED + "You must look at a Fence block.");
+                return true;
+            }
+
+            if (subCmd.equals("clearposts")) {
+                if (!(sender instanceof Player)) { sender.sendMessage(ChatColor.RED + "Only players."); return true; }
+                int cleared = banManager.clearPosts((Player) sender);
+                sender.sendMessage(ChatColor.GREEN + "Cleared " + cleared + " BoxTop posts!");
+                return true;
+            }
+
+            if (subCmd.equals("setlegacy")) {
+                if (!(sender instanceof Player)) { sender.sendMessage(ChatColor.RED + "Only players."); return true; }
+                banManager.setBanLocation(((Player) sender).getLocation());
+                sender.sendMessage(ChatColor.GREEN + "Legacy single ban location set!");
+                return true;
+            }
+
+            if (subCmd.equals("ban")) {
+                if (args.length < 3) {
+                    sender.sendMessage(ChatColor.RED + "Usage: /boxtop admin ban <player> [time e.g. 7d/12h] [reason]");
+                    return true;
+                }
+                String targetName = args[2];
+                long durationMillis = -1L;
+                int reasonStartIndex = 3;
+                
+                if (args.length > 3) {
+                    long parsed = fun.gexel.boxtop.managers.BanManager.parseDurationMillis(args[3]);
+                    if (parsed != -1L || args[3].equalsIgnoreCase("perm")) {
+                        durationMillis = parsed;
+                        reasonStartIndex = 4;
+                    }
+                }
+                
+                StringBuilder rb = new StringBuilder();
+                for (int i = reasonStartIndex; i < args.length; i++) rb.append(args[i]).append(" ");
+                String reason = rb.length() > 0 ? rb.toString().trim() : "Hung on the BoxTop post!";
+
+                Player targetPlayer = Bukkit.getPlayerExact(targetName);
+                boolean success;
+                if (targetPlayer != null) {
+                    if (targetPlayer.hasPermission("boxtop.admin") && !sender.getName().equals("CONSOLA")) {
+                        sender.sendMessage(ChatColor.RED + "You cannot ban another admin!");
+                        return true;
+                    }
+                    success = banManager.banPlayer(targetPlayer, durationMillis, reason);
+                } else {
+                    @SuppressWarnings("deprecation")
+                    org.bukkit.OfflinePlayer op = Bukkit.getOfflinePlayer(targetName);
+                    success = op != null && op.hasPlayedBefore() && banManager.banOfflinePlayer(op, durationMillis, reason);
+                }
+                
+                if (success) {
+                    String timeMsg = durationMillis > 0 ? " for " + fun.gexel.boxtop.managers.BanManager.formatRemainingTime(System.currentTimeMillis() + durationMillis).replace(" left", "") : " permanently";
+                    Bukkit.broadcastMessage(ChatColor.RED + "✦ " + ChatColor.YELLOW + targetName
+                        + ChatColor.RED + " has been turned into a BoxTop punching bag" + timeMsg + "! (" + reason + ")");
+                } else {
+                    sender.sendMessage(ChatColor.RED + "Failed to ban! Make sure you have empty generated posts or a legacy ban location.");
+                }
+                return true;
+            }
+
+            if (subCmd.equals("unban")) {
+                if (args.length < 3) {
+                    sender.sendMessage(ChatColor.RED + "Usage: /boxtop admin unban <player>");
+                    return true;
+                }
+                String targetName = args[2];
+                Player tp = Bukkit.getPlayerExact(targetName);
+                boolean success = false;
+                if (tp != null) {
+                    success = banManager.unbanPlayer(tp.getUniqueId());
+                } else {
+                    @SuppressWarnings("deprecation")
+                    org.bukkit.OfflinePlayer op = Bukkit.getOfflinePlayer(targetName);
+                    if (op != null) success = banManager.unbanPlayer(op.getUniqueId());
+                }
+                if (success) sender.sendMessage(ChatColor.GREEN + "Player '" + targetName + "' unbanned.");
+                else sender.sendMessage(ChatColor.RED + "Player '" + targetName + "' not found or not banned.");
+                return true;
+            }
+            
+            sender.sendMessage(ChatColor.RED + "Unknown admin subcommand.");
+            return true;
+        }
+
         return true;
     }
+
 
     private Entity getTargetEntity(Player player, int range) {
         List<Entity> nearby = player.getNearbyEntities(range, range, range);

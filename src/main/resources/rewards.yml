@@ -1,0 +1,89 @@
+# ============================================================
+#  BoxTop - Per-Bag Reward Configuration
+#  rewards.yml
+#
+#  Configure reward layers independently for each bag.
+#  The bag name must match the name used with /boxtop spawn.
+#
+#  Fallback chain:
+#    rewards.yml (bag entry) → config.yml (default-bag-rewards) → disabled
+#
+#  HOW TO USE:
+#  Add your bags under the 'bags:' key below.
+#  Each bag supports three independent reward layers:
+#
+#    milestones   — Run console commands every X cumulative damage per player
+#    loot-table   — Drop a random physical item on each hit (chance-based)
+#    pinata       — Drop items for everyone after X total hits on the bag
+#
+#  MATERIAL NAMES:
+#  Use XSeries names (same as Bukkit 1.13+ names).
+#  Examples: GOLD_NUGGET, IRON_INGOT, DIAMOND, EMERALD,
+#            EXPERIENCE_BOTTLE, NETHERITE_INGOT, BREAD, etc.
+#
+#  COLOR CODES:
+#  Use '&' for color codes in 'name' and 'lore' fields.
+#  Example: "&6Golden Nugget" = orange/gold text
+# ============================================================
+
+bags:
+
+  # ============================================================
+  #  EXAMPLE BAG — rename "example-bag" to your actual bag name
+  #  (the name you used with /boxtop spawn <name>)
+  # ============================================================
+  example-bag:
+
+    # ----------------------------------------------------------
+    # Layer 1: Milestone Rewards (per player, per bag)
+    # Fires every time a player accumulates a multiple of
+    # 'interval' damage on THIS specific bag.
+    # ----------------------------------------------------------
+    milestones:
+      enabled: false
+      interval: 500.0
+      commands:
+        - "eco give %player% 50"
+        - "give %player% golden_apple 1"
+
+    # ----------------------------------------------------------
+    # Layer 2: Per-Hit Loot Table (physical item drops)
+    # Each valid punch rolls against 'chance-per-hit'.
+    # If it passes, one item is selected via weighted random.
+    # Items scatter outward — any player nearby can pick them up.
+    # ----------------------------------------------------------
+    loot-table:
+      enabled: false
+      chance-per-hit: 5.0
+      items:
+        - material: GOLD_NUGGET
+          amount: 1
+          weight: 70
+        - material: IRON_INGOT
+          amount: 1
+          weight: 25
+        - material: DIAMOND
+          amount: 1
+          weight: 5
+          name: "&bChampion's Gem"
+          lore:
+            - "&7An extremely rare drop!"
+
+    # ----------------------------------------------------------
+    # Layer 3: Pinata Mode (communal — all players combined)
+    # Counts total hits from ALL players on this bag.
+    # When counter reaches 'hits-required':
+    #   - Burst of particles + firework sound
+    #   - All items drop with scatter for everyone nearby
+    #   - Counter resets to 0 automatically
+    # ----------------------------------------------------------
+    pinata:
+      enabled: true
+      hits-required: 100
+      items:
+        - material: EMERALD
+          amount: 3
+        - material: EXPERIENCE_BOTTLE
+          amount: 5
+        - material: GOLD_INGOT
+          amount: 2

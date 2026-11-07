@@ -3,6 +3,7 @@ package fun.gexel.boxtop.managers;
 import com.cryptomorin.xseries.XSound;
 import fun.gexel.boxtop.BoxTopPlugin;
 import fun.gexel.boxtop.objects.BagData;
+import org.bukkit.Location;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 
@@ -99,8 +100,37 @@ public class SoundManager {
         Optional<XSound> xSound = XSound.matchXSound(soundName);
         if (xSound.isPresent()) {
             xSound.get().play(player, volume, pitch);
-        } else {
-            plugin.getLogger().warning("[BoxTop] Sonido no encontrado: " + soundName);
+            return;
+        }
+
+        // 3. Intento como sonido personalizado / de Resource Pack (String)
+        try {
+            player.playSound(player.getLocation(), soundName.toLowerCase(), volume, pitch);
+        } catch (Throwable t) {
+            plugin.getLogger().warning("[BoxTop] No se pudo reproducir el sonido: " + soundName);
+        }
+    }
+
+    /**
+     * Plays the piñata burst sound at a world location, audible to all nearby players.
+     * Tries modern names first, falls back through legacy names for 1.12 compat.
+     */
+    public void playPinataSound(Location location) {
+        if (location == null || location.getWorld() == null) return;
+        String[] candidates = {
+            "ENTITY_FIREWORK_ROCKET_LAUNCH",
+            "ENTITY_FIREWORK_LAUNCH",
+            "FIREWORK_LAUNCH"
+        };
+        for (String name : candidates) {
+            try {
+                Sound s = Sound.valueOf(name);
+                location.getWorld().playSound(location, s, 1.5f, 0.75f);
+                // Play a second celebratory tone slightly higher
+                location.getWorld().playSound(location, s, 1.0f, 1.2f);
+                return;
+            } catch (IllegalArgumentException ignored) {}
         }
     }
 }
+

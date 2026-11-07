@@ -6,8 +6,9 @@
 
     <groupId>fun.gexel</groupId>
     <artifactId>BoxTop</artifactId>
-    <version>2.7.0</version>
+    <version>3.5</version>
     <packaging>jar</packaging>
+
     <name>BoxTop</name>
 
     <properties>

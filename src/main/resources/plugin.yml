@@ -1,6 +1,7 @@
 name: BoxTop
-version: 2.6
+version: 3.5
 main: fun.gexel.boxtop.BoxTopPlugin
+
 api-version: 1.13
 authors: [_gengis]
 description: Thanks for download!

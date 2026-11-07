@@ -2,12 +2,18 @@ package fun.gexel.boxtop.listeners;
 
 import fun.gexel.boxtop.BoxTopPlugin;
 import fun.gexel.boxtop.gui.BagConfigGUI;
+import fun.gexel.boxtop.managers.BagSpawnManager;
 import fun.gexel.boxtop.managers.DataManager;
 import fun.gexel.boxtop.managers.GlowManager;
+
 import fun.gexel.boxtop.objects.BagData;
+import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
+
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
@@ -30,13 +36,16 @@ public class BagConfigListener implements Listener {
     private final DataManager dataManager;
     private final GlowManager glowManager;
     private final BagConfigGUI configGUI;
+    private final BagSpawnManager spawnManager;
 
     public BagConfigListener(BoxTopPlugin plugin, DataManager dataManager,
-                             GlowManager glowManager, BagConfigGUI configGUI) {
-        this.plugin = plugin;
-        this.dataManager = dataManager;
-        this.glowManager = glowManager;
-        this.configGUI = configGUI;
+                             GlowManager glowManager, BagConfigGUI configGUI,
+                             BagSpawnManager spawnManager) {
+        this.plugin       = plugin;
+        this.dataManager  = dataManager;
+        this.glowManager  = glowManager;
+        this.configGUI    = configGUI;
+        this.spawnManager = spawnManager;
     }
 
     // -------------------------------------------------------
@@ -92,10 +101,18 @@ public class BagConfigListener implements Listener {
                 glowManager.updateGlow();
             }
 
-            // 3. Refrescar el inventario abierto sin cerrarlo
+            // 3. Aplicar invisibilidad en tiempo real (sin reiniciar)
+            if (action.equals("ACTION:TOGGLE_INVISIBLE")) {
+                Entity entity = Bukkit.getEntity(bag.getUuid());
+                if (entity instanceof LivingEntity) {
+                    spawnManager.applyInvisibility((LivingEntity) entity, bag.isInvisible());
+                }
+            }
+
+            // 4. Refrescar el inventario abierto sin cerrarlo
             configGUI.populate(event.getInventory(), bag);
 
-            // 4. Feedback sonoro leve
+            // 5. Feedback sonoro leve
             try {
                 player.playSound(player.getLocation(),
                     org.bukkit.Sound.valueOf("UI_BUTTON_CLICK"), 0.5f, 1.2f);

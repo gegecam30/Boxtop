@@ -68,17 +68,30 @@ public class DuelManager {
 
         sender.sendMessage(ChatColor.GREEN + "Duel invitation sent to " + target.getName() + "!");
         
+        // Texto configurado del botón (con fallback por si falta en config)
+        String buttonText = plugin.getConfig().getString("duels.accept-button-text", "&6[CLICK HERE TO ACCEPT]");
+
         // Enviar formato de invitación línea por línea
         for (String line : dataManager.getStringList("duels.invite-format")) {
             String msg = line.replace("{player}", sender.getName());
             
-            if (msg.contains("[CLICK")) {
+            // Si la línea contiene el placeholder del botón, la volvemos clickeable
+            if (msg.contains("{accept_button}")) {
+                msg = msg.replace("{accept_button}", buttonText);
+                
                 // INTENTO DE MENSAJE CLICKEABLE (Funciona en 1.12+)
                 try {
-                    TextComponent component = new TextComponent(ChatColor.translateAlternateColorCodes('&', msg));
-                    component.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/boxtop accept " + sender.getName()));
-                    component.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new ComponentBuilder(ChatColor.GREEN + "Click to accept duel!").create()));
-                    target.spigot().sendMessage(component);
+                    String translated = ChatColor.translateAlternateColorCodes('&', msg);
+                    net.md_5.bungee.api.chat.BaseComponent[] components = net.md_5.bungee.api.chat.TextComponent.fromLegacyText(translated);
+                    
+                    ClickEvent clickEvent = new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/boxtop accept " + sender.getName());
+                    HoverEvent hoverEvent = new HoverEvent(HoverEvent.Action.SHOW_TEXT, new ComponentBuilder(ChatColor.GREEN + "Click to accept duel!").create());
+                    
+                    for (net.md_5.bungee.api.chat.BaseComponent comp : components) {
+                        comp.setClickEvent(clickEvent);
+                        comp.setHoverEvent(hoverEvent);
+                    }
+                    target.spigot().sendMessage(components);
                 } catch (Exception e) {
                     // Si falla el componente avanzado, enviamos texto plano
                     target.sendMessage(ChatColor.translateAlternateColorCodes('&', msg));
@@ -89,7 +102,26 @@ public class DuelManager {
                 target.sendMessage(ChatColor.translateAlternateColorCodes('&', hint));
                 
             } else {
-                target.sendMessage(ChatColor.translateAlternateColorCodes('&', msg));
+                // Compatible con configs antiguas que tenían el [CLICK] harcodeado directamente
+                if (msg.contains("[CLICK")) {
+                    try {
+                        String translated = ChatColor.translateAlternateColorCodes('&', msg);
+                        net.md_5.bungee.api.chat.BaseComponent[] components = net.md_5.bungee.api.chat.TextComponent.fromLegacyText(translated);
+                        ClickEvent clickEvent = new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/boxtop accept " + sender.getName());
+                        HoverEvent hoverEvent = new HoverEvent(HoverEvent.Action.SHOW_TEXT, new ComponentBuilder(ChatColor.GREEN + "Click to accept duel!").create());
+                        for (net.md_5.bungee.api.chat.BaseComponent comp : components) {
+                            comp.setClickEvent(clickEvent);
+                            comp.setHoverEvent(hoverEvent);
+                        }
+                        target.spigot().sendMessage(components);
+                    } catch (Exception e) {
+                        target.sendMessage(ChatColor.translateAlternateColorCodes('&', msg));
+                    }
+                    String hint = dataManager.getRawMessage("duels.messages.invite-hint").replace("{player}", sender.getName());
+                    target.sendMessage(ChatColor.translateAlternateColorCodes('&', hint));
+                } else {
+                    target.sendMessage(ChatColor.translateAlternateColorCodes('&', msg));
+                }
             }
         }
 

@@ -38,6 +38,10 @@ public class BagData {
     // --- MATERIAL DEL SACO ---
     private BagMaterial material;
 
+    // --- INVISIBILIDAD ---
+    private boolean invisible;      // true = entity is invisible (only helmet/armor shows)
+
+
     // -------------------------------------------------------
     // CONSTRUCTOR
     // -------------------------------------------------------
@@ -55,8 +59,10 @@ public class BagData {
         this.physicsEnabled   = true;
         this.knockbackStrength = 0.4;
         this.verticalStrength  = 0.1;
-        this.material         = BagMaterial.SAND;
+        this.material          = BagMaterial.SAND;
+        this.invisible         = true;  // default: invisible so only the helmet/armor shows
     }
+
 
     // -------------------------------------------------------
     // ENUM DE MATERIALES
@@ -105,6 +111,8 @@ public class BagData {
     public double      getKnockbackStrength() { return knockbackStrength; }
     public double      getVerticalStrength()  { return verticalStrength; }
     public BagMaterial getMaterial()          { return material; }
+    public boolean     isInvisible()          { return invisible; }
+
 
     // -------------------------------------------------------
     // SETTERS
@@ -120,6 +128,8 @@ public class BagData {
     public void setKnockbackStrength(double v)   { this.knockbackStrength = v; }
     public void setVerticalStrength(double v)    { this.verticalStrength = v; }
     public void setMaterial(BagMaterial v)       { this.material = v; }
+    public void setInvisible(boolean v)          { this.invisible = v; }
+
 
     // -------------------------------------------------------
     // FÍSICA EFECTIVA
@@ -152,7 +162,9 @@ public class BagData {
         cfg.set(b + ".knockback-strength", knockbackStrength);
         cfg.set(b + ".vertical-strength",  verticalStrength);
         cfg.set(b + ".material",           material.name());
+        cfg.set(b + ".invisible",          invisible);
     }
+
 
     // -------------------------------------------------------
     // DESERIALIZACIÓN ← YAML
@@ -182,8 +194,10 @@ public class BagData {
         bag.knockbackStrength= cfg.getDouble( b + ".knockback-strength", bag.knockbackStrength);
         bag.verticalStrength = cfg.getDouble( b + ".vertical-strength",  bag.verticalStrength);
         bag.material         = BagMaterial.fromString(cfg.getString(b + ".material"));
+        bag.invisible        = cfg.getBoolean(b + ".invisible", true); // default true = backward compat
 
         return bag;
+
     }
 
     private static ChatColor parseChatColor(String s, ChatColor fallback) {

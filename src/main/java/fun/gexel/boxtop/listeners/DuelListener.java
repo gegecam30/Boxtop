@@ -19,7 +19,11 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
+import fun.gexel.boxtop.gui.UserGUI;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
+
 
 public class DuelListener implements Listener {
 
@@ -30,7 +34,11 @@ public class DuelListener implements Listener {
     private final BagConfigGUI configGUI;
 
     // Sesión: jugador → saco seleccionado (para el menú de duelos)
-    private final java.util.Map<UUID, UUID> playerSelectedBag = new java.util.HashMap<>();
+    private final Map<UUID, UUID> playerSelectedBag = new HashMap<>();
+
+    // Lazy reference — set by BoxTopPlugin after UserGUI is initialized
+    private UserGUI userGUI;
+
 
     public DuelListener(BoxTopPlugin plugin, DataManager dataManager,
                         DuelManager duelManager, DuelGUI duelGUI, BagConfigGUI configGUI) {
@@ -75,7 +83,16 @@ public class DuelListener implements Listener {
             return;
         }
 
-        // --- CLICK DERECHO SIMPLE → Menú de duelos ---
+        // --- CLICK DERECHO SIMPLE → User GUI (if enabled) or Duel GUI directly ---
+        if (plugin.getConfig().getBoolean("features.user-gui", false)) {
+            BagData bagData = dataManager.getBagByUUID(entityUUID);
+            if (bagData != null && userGUI != null) {
+                userGUI.open(player, bagData);
+            }
+            return;
+        }
+
+        // Legacy path: open Duel GUI directly when user-gui is disabled
         if (!plugin.getConfig().getBoolean("duels.enabled")) return;
 
         if (duelManager.isBagInDuel(entityUUID)) {
@@ -85,6 +102,37 @@ public class DuelListener implements Listener {
 
         playerSelectedBag.put(player.getUniqueId(), entityUUID);
         duelGUI.openDuelMenu(player);
+    }
+
+    /**
+     * Called by UserGUIListener when the Duel button is clicked inside the User GUI.
+     * Looks up the bag UUID by name, registers the session, and opens DuelGUI.
+     */
+    public void openDuelGUIForPlayer(Player player, String bagName) {
+        if (!plugin.getConfig().getBoolean("duels.enabled")) {
+            player.sendMessage(ChatColor.RED + "Duels are currently disabled.");
+            player.closeInventory();
+            return;
+        }
+        BagData bag = dataManager.getBag(bagName);
+        if (bag == null) {
+            player.sendMessage(ChatColor.RED + "[BoxTop] Bag not found.");
+            player.closeInventory();
+            return;
+        }
+        if (duelManager.isBagInDuel(bag.getUuid())) {
+            player.sendMessage(dataManager.getMessage("duels.messages.bag-busy"));
+            player.closeInventory();
+            return;
+        }
+        player.closeInventory();
+        playerSelectedBag.put(player.getUniqueId(), bag.getUuid());
+        duelGUI.openDuelMenu(player);
+    }
+
+    /** Inject UserGUI after construction (avoids circular dependency). */
+    public void setUserGUI(UserGUI userGUI) {
+        this.userGUI = userGUI;
     }
 
     // -------------------------------------------------------

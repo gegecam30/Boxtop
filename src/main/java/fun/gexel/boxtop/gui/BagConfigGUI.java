@@ -172,6 +172,15 @@ public class BagConfigGUI {
         inv.setItem(38, makeMaterialDisplay(bag.getMaterial()));
         inv.setItem(39, makeArrow(true, "Bag Material", "ACTION:MATERIAL_NEXT"));
 
+        // ===== FILA 5: INVISIBILIDAD =====
+        // Slot 41: Toggle Invisibility
+        inv.setItem(41, makeToggle(
+            "👻 Invisibility",
+            bag.isInvisible(),
+            "Hide the entity body (armor/heads still visible)",
+            "ACTION:TOGGLE_INVISIBLE"
+        ));
+
         // --- BOTÓN CERRAR ---
         inv.setItem(49, makeClose());
     }
@@ -237,6 +246,10 @@ public class BagConfigGUI {
 
             case "ACTION:MATERIAL_NEXT":
                 bag.setMaterial(cycleNextMaterial(bag.getMaterial()));
+                return true;
+
+            case "ACTION:TOGGLE_INVISIBLE":
+                bag.setInvisible(!bag.isInvisible());
                 return true;
 
             default:

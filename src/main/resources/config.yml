@@ -1,17 +1,28 @@
 # ----------------------------------------------------
-#   ____  _____  __  _________  ____  ____ 
-#  (  _ \(  _  )(  \/  )(_   _)(  _ \(  _ \
-#   ) _ < )(_)(  )    (   ) (   ) _ < ) __/
-#  (____/(_____)(_/\/\_) (___) (____/(__)  
+#  ____  _____  __  _________  ____  ____ 
+# (  _ \(  _  )(  \/  )(_   _)(  _ \(  _ \
+#  ) _ < )(_)(  )    (   ) (   ) _ < ) __/
+# (____/(_____)(_/\/\_) (___) (____/(__)  
 #
 #  BoxTop - The Ultimate Punching Bag Plugin
-#  Author: _gengis | Version: 2.5 (Legacy Support)
+#  Author: _gengis | Version: 3.3
 # ----------------------------------------------------
+
+
+# --- FEATURE FLAGS ---
+# Controls which systems are active globally.
+# A flag set to false completely disables that system for all players.
+# Use /boxtop reload to apply changes without restarting the server.
+features:
+  pinata: true     # Pinata Mode: communal hit counter — items burst for everyone nearby
+  user-gui: true   # Right-click bag config menu (Shift + Right Click)
+  milestones: true # Milestone Mode: gives rewards when reaching X damage globally
+  loot-table: true # Loot Table Mode: individual random drops per punch
 
 # --- HIT NOTIFICATION (Action Bar) ---
 # Message displayed above the inventory when hitting the bag.
-# [!] Replaced emoji with safe ASCII text
 hit-actionbar: "&c&l[!] HIT! &fYou dealt &e{damage} &fdamage"
+
 
 # --- PHYSICS SYSTEM ---
 physics:
@@ -24,8 +35,7 @@ physics:
 # --- VISUAL EFFECTS ---
 particles:
   enabled: true
-  # Particle Types: 
-  # XSeries handles compatibility automatically. You can use modern names.
+  # Particle Types: XSeries handles compatibility automatically. 
   # Common examples: VILLAGER_HAPPY, FLAME, HEART, SOUL, CLOUD, SPELL_WITCH
   type: "VILLAGER_HAPPY"
   amount: 3
@@ -36,23 +46,20 @@ particles:
 # --- GLOWING EFFECT ---
 glow:
   enabled: true
-  # Valid Colors (Bukkit standard):
-  # BLACK, DARK_BLUE, DARK_GREEN, DARK_AQUA, DARK_RED, DARK_PURPLE, GOLD, GRAY,
-  # DARK_GRAY, BLUE, GREEN, AQUA, RED, LIGHT_PURPLE, YELLOW, WHITE
+  # Valid Colors (Bukkit standard): BLACK, DARK_BLUE, DARK_GREEN, DARK_AQUA, 
+  # DARK_RED, DARK_PURPLE, GOLD, GRAY, DARK_GRAY, BLUE, GREEN, AQUA, RED, 
+  # LIGHT_PURPLE, YELLOW, WHITE
   color: "GOLD"
 
 # --- SOUND SYSTEM ---
 sounds:
   enabled: true
-  # Sounds Reference (XSound): 
-  # Use Modern (1.13+) names. The plugin will auto-translate them for 1.12.
-  # LIST: https://github.com/CryptoMorin/XSeries/blob/master/src/main/java/com/cryptomorin/xseries/XSound.java
-  
+  # Sounds Reference (XSound): Use Modern (1.13+) names or custom Resource Pack sound IDs (e.g. boxtop.hit).
+  # The plugin will auto-translate modern names for 1.12, or play custom strings directly.
   # Sound on hit (Soft hit)
-  hit-sound: "ENTITY_PLAYER_ATTACK_WEAK"
+  hit-sound: "boxtop.hit"
   # Sound on hit with muscle bonus (Heavy hit)
   muscle-sound: "ENTITY_ZOMBIE_ATTACK_IRON_DOOR"
-  
   volume: 1.0
   pitch: 1.0
 
@@ -64,9 +71,19 @@ stamina:
   reset-burst-time: 5
   # Duration of the exhaustion cooldown in seconds
   cooldown-duration: 60
-  # [!] Replaced emojis with (!)
   message-tired: "&c(!) You are exhausted! Rest for ({time}s)."
   message-recovered: "&a(!) You have caught your breath."
+
+# --- RETURN DAMAGE (Rapid Hit Penalty) ---
+# Punishes players for hitting a bag too fast (spam clicking / autoclicker).
+# Deals a small amount of damage back and shows a warning message.
+return-damage:
+  enabled: true
+  # Minimum milliseconds between hits before penalty triggers
+  threshold-ms: 150
+  # Damage dealt back to the player (0.5 = quarter heart)
+  damage: 0.5
+  message: "&cYour hand hurts from hitting too fast!"
 
 # --- MUSCULATURE SYSTEM (RPG) ---
 musculature:
@@ -87,7 +104,6 @@ rewards:
   interval: 1000.0
   commands:
     - "eco give %player% 50"
-    # Using plain text for 1.12 compatibility
     - "tellraw %player% {\"text\":\"[BoxTop] Reward received!\",\"color\":\"green\"}"
 
 # --- DUEL SYSTEM (1vs1) ---
@@ -95,16 +111,13 @@ duels:
   enabled: true
   duration: 30
   search-radius: 15
-  
-  # Format of the invitation lines
   invite-format:
     - "&8&m---------------------------------"
     - "&e{player} &7has challenged you to a BoxTop Duel!"
-    - "&6[CLICK HERE TO ACCEPT]"
+    - "{accept_button}"
     - "&8&m---------------------------------"
-  
+  accept-button-text: "&6[CLICK HERE TO ACCEPT]"
   messages:
-    # [!] Replaced emoji with >>
     menu-title: "&8>> Select Opponent"
     click-to-challenge: "&7Click to challenge &e{player}"
     bag-busy: "&cThis bag is currently busy!"
@@ -113,7 +126,6 @@ duels:
     duel-ended-winner: "&6WINNER! &e{winner} &7won with &c{damage} &7damage!"
     duel-ended-tie: "&eIt's a tie! Both dealt &c{damage} &7damage."
     invite-hint: "&7(Type &e/boxtop accept {player} &7to accept)"
-    # BossBar
     bossbar-format: "&c{p1} &7(&c{d1}&7) &8vs &b{p2} &7(&b{d2}&7) &f- &e{time}s"
 
 # --- GENERAL MESSAGES ---
@@ -133,30 +145,38 @@ messages:
   stats-header: "&8&m--------&r &6Statistics &8&m--------"
   stats-format: "&eTotal Damage: &f{damage}"
   stats-no-data: "&cYou haven't hit anything yet."
-  
   list-header: "&8&m--------&r &6Active Arenas &8&m--------"
-  # [!] Replaced emoji with *
   list-format: "&e* &f{name} &7(Active)"
   list-empty: "&cNo bags configured."
 
-
-  # --- SPAWNED BAG (ArmorStand) ---
-# Configuración para sacos creados con /boxtop spawn
-# Estos sacos son ArmorStands invisibles gestionados por el plugin.
+# --- SPAWNED BAG CONFIGURATION ---
+# Configuration for bags created with /boxtop spawn.
+# The bag is an invisible Villager with active AI and SLOWNESS-255.
+# (Active AI = physics work; SLOWNESS-255 = it cannot walk around)
 spawned-bag:
-  # CustomModelData para el resource pack.
-  # 0 = sin modelo custom (muestra LEATHER_CHESTPLATE normal)
-  # >0 = activa el modelo 3D del resource pack para ese ID
-  # Ejemplo: si tu resource pack define el modelo de saco con CMD 1001, pon 1001 aquí.
+
+  # --- VERSIONS 1.14+ (MODERN) ---
+  # CustomModelData for the resource pack.
+  # 0 = no custom model (shows normal PAPER on the entity's head)
+  # >0 = activates the 3D model from the resource pack for that ID.
+  # Example: if your resource pack defines the bag model with CMD 1001, put 1001 here.
   custom-model-data: 1001
 
-  # Instrucciones para el resource pack:
-  # 1. Crea la carpeta: assets/minecraft/models/item/
-  # 2. Edita leather_chestplate.json y agrega un override:
-  #    {
-  #      "predicate": {"custom_model_data": 1001},
-  #      "model": "item/boxing_bag"
-  #    }
-  # 3. Crea assets/minecraft/models/item/boxing_bag.json con tu modelo 3D
-  # 4. Pon las texturas en assets/minecraft/textures/item/
-  # 5. Sube el pack al servidor o distribúyelo manualmente
+  # --- VERSIONS 1.12 & 1.13 (LEGACY) ---
+  # In 1.12/1.13 CustomModelData does not exist. To display a custom texture,
+  # the old damage value (item durability) system is used.
+  # Configure the item and its damage value according to your legacy resource pack.
+  legacy-material: "DIAMOND_HOE"
+  legacy-damage: 1
+
+  # --- RESOURCE PACK INSTRUCTIONS ---
+  # MODERN (1.21.4+):
+  # 1. Add your 3D model to: assets/minecraft/models/item/boxing_bag.json
+  # 2. Add your component definition to: assets/minecraft/items/paper.json
+  # 3. Put textures in: assets/minecraft/textures/item/
+  #
+  # LEGACY (1.12.2):
+  # 1. Add your 3D model to: assets/minecraft/models/item/boxing_bag.json
+  # 2. Add your override to: assets/minecraft/models/item/diamond_hoe.json
+  # 3. Put textures in: assets/minecraft/textures/items/ (Plural folder)
+

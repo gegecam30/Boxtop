@@ -7,6 +7,7 @@ import org.bukkit.ChatColor;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 
+
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
@@ -35,13 +36,17 @@ public class DataManager {
     // --- ESTADÍSTICAS DE JUGADORES (SQLite) ---
     private final DatabaseManager databaseManager;
 
+    // --- REWARDS CONFIG (rewards.yml) ---
+    private final RewardsFileManager rewardsFileManager;
+
     // -------------------------------------------------------
     // CONSTRUCTOR
     // -------------------------------------------------------
 
     public DataManager(BoxTopPlugin plugin) {
         this.plugin = plugin;
-        this.databaseManager = new DatabaseManager(plugin);
+        this.databaseManager    = new DatabaseManager(plugin);
+        this.rewardsFileManager = new RewardsFileManager(plugin);
         createDataFile();
         loadBags();
     }
@@ -99,6 +104,7 @@ public class DataManager {
         plugin.reloadConfig();
         createDataFile();
         loadBags();
+        rewardsFileManager.reload();
     }
 
     // -------------------------------------------------------
@@ -209,6 +215,33 @@ public class DataManager {
 
     public List<PlayerStat> getTop(int limit) {
         return databaseManager.getTop(limit);
+    }
+
+    // --- Per-bag stats (new in v3.1) ---
+
+    public void addBagDamage(java.util.UUID uuid, String playerName, double damage, String bagName) {
+        databaseManager.addBagDamage(bagName, uuid, playerName, damage);
+    }
+
+    public PlayerStat getBagPlayerStat(String bagName, java.util.UUID uuid) {
+        return databaseManager.getBagPlayerStat(bagName, uuid);
+    }
+
+    public List<PlayerStat> getBagTop(String bagName, int limit) {
+        return databaseManager.getBagTop(bagName, limit);
+    }
+
+    public int getPlayerBagRank(String bagName, java.util.UUID uuid) {
+        return databaseManager.getPlayerBagRank(bagName, uuid);
+    }
+
+    public void clearBagStats(String bagName) {
+        databaseManager.clearBagStats(bagName);
+    }
+
+    /** Expose RewardsFileManager so managers can read reward config. */
+    public RewardsFileManager getRewardsFileManager() {
+        return rewardsFileManager;
     }
 
     /**
